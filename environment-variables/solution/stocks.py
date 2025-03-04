@@ -1,186 +1,185 @@
-# -------------------- 
+# --------------------
 # Import Statements
 # --------------------
-from sqlalchemy import create_engine, Table, Column, Integer, String, MetaData, Float, DateTime
+import os
+import requests
+import pandas as pd
+from datetime import datetime
+from dotenv import load_dotenv
+from sqlalchemy import create_engine, Table, Column, String, MetaData, Float, DateTime
 from sqlalchemy.engine import URL
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy import exc
-from dotenv import load_dotenv
-import os
-import pandas as pd
-from datetime import datetime
-import requests
 
 # --------------------
-# Load Environment Variables
+# Load Environment Variables (Fixed: Loaded Once)
 # --------------------
-# Load environment variables from .env file
 load_dotenv()
 
-# Accessing the environment variables
 api_key = os.getenv('API_KEY')
 db_user = os.getenv('DB_USER')
 db_password = os.getenv('DB_PASSWORD')
 db_server_name = os.getenv('DB_SERVER_NAME')
 db_database_name = os.getenv('DB_DATABASE_NAME')
 
-# Check if all required environment variables are set
-if not api_key or not db_user or not db_password or not db_server_name or not db_database_name:
-    raise ValueError("One or more required environment variables are missing.")
+# Validate environment variables
+if not all([api_key, db_user, db_password, db_server_name, db_database_name]):
+    raise ValueError(" One or more required environment variables are missing.")
 
 # --------------------
-# Step 1: Extract Data
+# Database Connection (Uses a Function)
 # --------------------
-def extract_stock_data():
+def get_engine():
     """
-    Extracts stock data from MarketStack API.
-    Returns a DataFrame with the extracted data.
+    Creates and returns a SQLAlchemy engine using pg8000.
     """
-    # Define the API endpoint
+    connection_url = URL.create(
+        drivername="postgresql+pg8000",
+        username=db_user,
+        password=db_password,
+        host=db_server_name,
+        port=5432,
+        database=db_database_name
+    )
+    return create_engine(connection_url)
+
+# --------------------
+# Extract Data
+# --------------------
+def extract_stock_data(api_key: str) -> pd.DataFrame:
+    """
+    Extracts stock data from MarketStack API and returns a DataFrame.
+    """
     api_url = "https://api.marketstack.com/v1/eod"
 
-    # Define request parameters dynamically
     params = {
-        "access_key": api_key,  # MarketStack API Key from .env
-        "symbols": "AAPL,AMZN,GOOGL,MSFT,NFLX",  # Stock symbols
-        "sort": "DESC",  # Sort results from latest to oldest
-        "date_from": "2021-01-01",  # Start date (YYYY-MM-DD)
-        "date_to": datetime.today().strftime("%Y-%m-%d"),  # End date (YYYY-MM-DD)
-        "limit": 10000,  # Number of results per request (max: 1000 for paid plans)
-        "offset": 0  # Pagination offset (0 starts from the first record)
+        "access_key": api_key,
+        "symbols": "AAPL,AMZN,GOOGL,MSFT,NFLX",
+        "sort": "DESC",
+        "date_from": "2021-01-01",
+        "date_to": datetime.today().strftime("%Y-%m-%d"),
+        "limit": 5000,
+        "offset": 0
     }
 
-    # Send GET request to the MarketStack API
     response = requests.get(api_url, params=params)
 
-    # Check if the response is successful (status code 200)
     if response.status_code == 200:
-        data = response.json()  # Convert response to JSON
-        # Normalize the 'data' field to create a DataFrame
+        data = response.json()
         df = pd.json_normalize(data['data'])
-        print("Data extraction completed successfully.")
+        print("✅ Data extraction completed successfully.")
         return df
     else:
-        print("Error:", response.status_code, response.text)  # Print error message if request fails
-        return pd.DataFrame()  # Return an empty DataFrame on error
-
-# --------------------
-# Step 2: Transform Data
-# --------------------
-def transform_data(df):
-    """
-    Transforms the extracted stock data.
-    - Selects relevant columns
-    - Drops rows with NULL or empty Symbol or Date
-    - Converts Date to datetime format
-    - Creates a Unique ID by combining Symbol and Date
-    """
-    if df.empty:
-        print("No data to transform.")
+        print(f" Error: {response.status_code} - {response.text}")
         return pd.DataFrame()
 
-    # Select relevant columns and create a copy to avoid SettingWithCopyWarning
+# --------------------
+# Transform Data (Ensures Date is in UTC)
+# --------------------
+def transform_data(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Transforms extracted stock data by selecting columns, filtering, and formatting.
+    Converts the date column to UTC.
+    """
+    if df.empty:
+        print("⚠️ No data to transform.")
+        return pd.DataFrame()
+
     df_stocks_selected = df.loc[:, ["open", "close", "volume", "dividend", "symbol", "exchange", "date"]].copy()
 
-    # Remove rows with missing or empty Symbol or Date
     df_stocks_selected = df_stocks_selected[
-        df_stocks_selected['symbol'].notna() & 
+        df_stocks_selected['symbol'].notna() &
         df_stocks_selected['symbol'].ne('') &
         df_stocks_selected['date'].notna()
     ]
+     
+    # Convert Date column to datetime format and set to UTC
+    df_stocks_selected['date'] = pd.to_datetime(df_stocks_selected['date'], errors='coerce').dt.tz_localize(None).dt.tz_localize('UTC')
 
-    # Convert Date column to datetime format
-    df_stocks_selected['date'] = pd.to_datetime(df_stocks_selected['date'], errors='coerce')
-
-    # Drop rows where Date conversion failed and became NaT (Not a Time)
     df_stocks_selected = df_stocks_selected.dropna(subset=['date'])
-
-    # Create Unique_ID by combining Symbol and Date
     df_stocks_selected['unique_id'] = df_stocks_selected['symbol'] + "_" + df_stocks_selected['date'].dt.strftime('%Y-%m-%d')
 
-    # Reset index to include unique_id as a column
     df_stocks_selected.reset_index(drop=True, inplace=True)
-
-    print("Data transformation completed successfully.")
+    print("✅ Data transformation completed successfully. (Time Zone: UTC)")
     return df_stocks_selected
 
 # --------------------
-# Step 3: Optimized Load Data with Bulk Upsert
+# Create Table Schema (Uses a Function)
 # --------------------
-def load_data(df_stocks_selected, engine, batch_size=1000):
+def create_table(engine):
     """
-    Loads the transformed data into PostgreSQL using bulk upsert logic.
-    Uses batching for large datasets.
+    Creates the stocks_data table if it does not exist.
     """
-    # Define the metadata and table schema inside the function
     meta = MetaData()
 
     stocks_table = Table(
-        "my_stocks_table", meta, 
-        Column("unique_id", String, primary_key=True),  # Use Unique_ID as the primary key
+        "stocks_data", meta,
+        Column("unique_id", String, primary_key=True),
         Column("open", Float),
         Column("close", Float),
         Column("volume", Float),
         Column("dividend", Float),
-        Column("symbol", String),       # Symbol as String
-        Column("exchange", String),     # Exchange as String
-        Column("date", DateTime(timezone=True))  # Date as DateTime with timezone
+        Column("symbol", String),
+        Column("exchange", String),
+        Column("date", DateTime(timezone=True))  # Ensures date is stored in UTC
     )
 
-    # Create the table if it does not exist
     meta.create_all(engine)
+    return stocks_table
+
+# --------------------
+# Load Data Using Batches to Avoid struct.error
+# --------------------
+def load_data(df_stocks_selected, engine, batch_size=1000):
+    """
+    Loads transformed data into PostgreSQL using batched insert and upsert.
+    Fixes struct.error: 'h' format requires -32768 <= number <= 32767.
+    """
+    if df_stocks_selected.empty:
+        print("⚠️ No data to insert.")
+        return
+
+    stocks_table = create_table(engine)
 
     # Convert DataFrame to list of dictionaries
     data_to_insert = df_stocks_selected.to_dict(orient='records')
 
-    # Check if data_to_insert is not empty
-    if not data_to_insert:
-        print("No data to insert.")
-        return
-
-    # Perform the bulk upsert in batches
+    # Perform the bulk upsert in batches to avoid exceeding parameter limits
     with engine.connect() as conn:
         try:
             for i in range(0, len(data_to_insert), batch_size):
-                batch = data_to_insert[i:i+batch_size]
+                batch = data_to_insert[i:i + batch_size]
 
                 # Create the insert statement
                 insert_statement = insert(stocks_table).values(batch)
-                
-                # Define the upsert statement
+
+                # Define upsert (update if key exists)
                 upsert_statement = insert_statement.on_conflict_do_update(
-                    index_elements=['unique_id'],  # Use Unique_ID as the conflict index
+                    index_elements=['unique_id'],
                     set_={col.name: col for col in insert_statement.excluded if col.name != 'unique_id'}
                 )
-                
-                # Execute the upsert in batch
+
                 conn.execute(upsert_statement)
-            
-            print("Bulk upsert completed successfully.")
-        
+
+            print("✅ Bulk upsert completed successfully.")
         except exc.SQLAlchemyError as e:
-            print(f"Error during bulk upsert: {e}")
+            print(f" Error during upsert: {e}")
 
 # --------------------
 # Main Execution Block
 # --------------------
 if __name__ == "__main__":
-    # Create the engine with pg8000
-    connection_url = URL.create(
-        drivername="postgresql+pg8000",  # Using pg8000 instead of psycopg2
-        username=db_user,
-        password=db_password,
-        host=db_server_name, 
-        port=5432,
-        database=db_database_name
-    )
-    engine = create_engine(connection_url)
+    # Create Engine
+    engine = get_engine()
+
+    # Create Table if not exists
+    create_table(engine)
 
     # Extract Data
-    df = extract_stock_data()
-    
-    # Transform Data
+    df = extract_stock_data(api_key)
+
+    # Transform Data (Now ensures time zone is UTC)
     df_stocks_selected = transform_data(df)
-    
+
     # Load Data into the Database
     load_data(df_stocks_selected, engine)
