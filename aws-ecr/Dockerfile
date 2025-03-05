@@ -10,14 +10,14 @@ COPY /app .
 
 ENV API_KEY=<api_key>
 ENV SERVER_NAME=<server_name>
-ENV DATABASE_NAME=weather
+ENV DATABASE_NAME=stocks
 ENV DB_USERNAME=postgres
 ENV DB_PASSWORD=<password>
 ENV PORT=5432
 ENV LOGGING_SERVER_NAME=<server_name>
-ENV LOGGING_DATABASE_NAME=weather
+ENV LOGGING_DATABASE_NAME=stocks
 ENV LOGGING_USERNAME=postgres
 ENV LOGGING_PASSWORD=<password>
 ENV LOGGING_PORT=5432
 
-CMD ["python", "-m", "etl_project.pipelines.weather"]
+CMD ["python", "-m", "app.pipelines.stocks"]
