@@ -4,8 +4,8 @@
 from dotenv import load_dotenv
 import os
 import pandas as pd
-from app.assets.extract_transform import extract_stock_data, transform_data
-from app.connectors.db_connector import get_engine, load_data
+from assets.extract_transform import extract_stock_data, transform_data
+from connectors.db_connector import get_engine, load_data
 
 # --------------------
 # Load Environment Variables

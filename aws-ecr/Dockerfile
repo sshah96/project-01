@@ -20,4 +20,4 @@ ENV LOGGING_USERNAME=postgres
 ENV LOGGING_PASSWORD=<password>
 ENV LOGGING_PORT=5432
 
-CMD ["python", "-m", "app.pipelines.stocks"]
+CMD ["python", "-m", "pipelines.stocks"]
