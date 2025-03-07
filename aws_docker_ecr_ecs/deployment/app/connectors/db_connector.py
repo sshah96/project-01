@@ -13,7 +13,7 @@ db_user = os.getenv('DB_USER')
 db_password = os.getenv('DB_PASSWORD')
 db_server_name = os.getenv('DB_SERVER_NAME')
 db_database_name = os.getenv('DB_DATABASE_NAME')
-db_port = int(os.getenv('PORT', 5432)) 
+db_port = int(os.getenv('PORT', 5432))  
 
 def get_engine():
     """
@@ -44,7 +44,7 @@ def create_table(engine):
         Column("dividend", Float),
         Column("symbol", String),
         Column("exchange", String),
-        Column("date", DateTime(timezone=True))  
+        Column("date", DateTime(timezone=True))  # This ensures date is stored in UTC
     )
 
     with engine.connect() as conn:
@@ -82,4 +82,4 @@ def load_data(df_stocks_selected, engine, batch_size=1000):
 
             print("Bulk upsert completed successfully.")
         except exc.SQLAlchemyError as e:
-            print(f"Error during upsert: {e}")
+            print(f" Error during upsert: {e}")
