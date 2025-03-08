@@ -1,0 +1,14 @@
+SELECT 
+    date, 
+    symbol, 
+    open, 
+    close, 
+    (close - open) AS price_change,
+    CASE 
+        WHEN close > open THEN 'Bullish' 
+        WHEN close < open THEN 'Bearish' 
+        ELSE 'Neutral'
+    END AS trend_status
+FROM stocks_data
+WHERE date >= '2024-12-01'
+ORDER BY date DESC, symbol;
