@@ -1,3 +1,4 @@
+# Library imports
 from app.assets.extract import extract_stock_data, transform_data
 from app.connectors.db_connector import get_engine, load_data
 import os

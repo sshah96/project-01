@@ -12,7 +12,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy import exc
 
 # --------------------
-# Load Environment Variables (Fixed: Loaded Once)
+# Loading Environment Variables (Fixed: Loaded Once)
 # --------------------
 load_dotenv()
 
@@ -22,12 +22,12 @@ db_password = os.getenv('DB_PASSWORD')
 db_server_name = os.getenv('DB_SERVER_NAME')
 db_database_name = os.getenv('DB_DATABASE_NAME')
 
-# Validate environment variables
+# Validating environment variables
 if not all([api_key, db_user, db_password, db_server_name, db_database_name]):
     raise ValueError(" One or more required environment variables are missing.")
 
 # --------------------
-# Database Connection (Uses a Function)
+# Database Connection 
 # --------------------
 def get_engine():
     """
@@ -44,7 +44,7 @@ def get_engine():
     return create_engine(connection_url)
 
 # --------------------
-# Extract Data
+# Extracting Data
 # --------------------
 def extract_stock_data(api_key: str) -> pd.DataFrame:
     """
@@ -67,14 +67,14 @@ def extract_stock_data(api_key: str) -> pd.DataFrame:
     if response.status_code == 200:
         data = response.json()
         df = pd.json_normalize(data['data'])
-        print("✅ Data extraction completed successfully.")
+        print("Data extraction completed successfully.")
         return df
     else:
         print(f" Error: {response.status_code} - {response.text}")
         return pd.DataFrame()
 
 # --------------------
-# Transform Data (Ensures Date is in UTC)
+# Transforming Data 
 # --------------------
 def transform_data(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -82,7 +82,7 @@ def transform_data(df: pd.DataFrame) -> pd.DataFrame:
     Converts the date column to UTC.
     """
     if df.empty:
-        print("⚠️ No data to transform.")
+        print("No data to transform.")
         return pd.DataFrame()
 
     df_stocks_selected = df.loc[:, ["open", "close", "volume", "dividend", "symbol", "exchange", "date"]].copy()
@@ -93,7 +93,7 @@ def transform_data(df: pd.DataFrame) -> pd.DataFrame:
         df_stocks_selected['date'].notna()
     ]
      
-    # Convert Date column to datetime format and set to UTC
+    # Converting Date column to datetime format and set to UTC
     df_stocks_selected['date'] = pd.to_datetime(df_stocks_selected['date'], errors='coerce').dt.tz_localize(None).dt.tz_localize('UTC')
 
     df_stocks_selected = df_stocks_selected.dropna(subset=['date'])
@@ -104,7 +104,7 @@ def transform_data(df: pd.DataFrame) -> pd.DataFrame:
     return df_stocks_selected
 
 # --------------------
-# Create Table Schema (Uses a Function)
+# Creating Table Schema 
 # --------------------
 def create_table(engine):
     """
@@ -121,14 +121,14 @@ def create_table(engine):
         Column("dividend", Float),
         Column("symbol", String),
         Column("exchange", String),
-        Column("date", DateTime(timezone=True))  # Ensures date is stored in UTC
+        Column("date", DateTime(timezone=True))  
     )
 
     meta.create_all(engine)
     return stocks_table
 
 # --------------------
-# Load Data Using Batches to Avoid struct.error
+# Loading Data Using Batches to avoid structure.error
 # --------------------
 def load_data(df_stocks_selected, engine, batch_size=1000):
     """
@@ -136,24 +136,24 @@ def load_data(df_stocks_selected, engine, batch_size=1000):
     Fixes struct.error: 'h' format requires -32768 <= number <= 32767.
     """
     if df_stocks_selected.empty:
-        print("⚠️ No data to insert.")
+        print("No data to insert.")
         return
 
     stocks_table = create_table(engine)
 
-    # Convert DataFrame to list of dictionaries
+    # Converting DataFrame to list of dictionaries
     data_to_insert = df_stocks_selected.to_dict(orient='records')
 
-    # Perform the bulk upsert in batches to avoid exceeding parameter limits
+    # Performing the bulk upsert in batches to avoid exceeding parameter limits
     with engine.connect() as conn:
         try:
             for i in range(0, len(data_to_insert), batch_size):
                 batch = data_to_insert[i:i + batch_size]
 
-                # Create the insert statement
+                # Creating the insert statement
                 insert_statement = insert(stocks_table).values(batch)
 
-                # Define upsert (update if key exists)
+                # Defining upsert (update if key exists)
                 upsert_statement = insert_statement.on_conflict_do_update(
                     index_elements=['unique_id'],
                     set_={col.name: col for col in insert_statement.excluded if col.name != 'unique_id'}
@@ -161,25 +161,25 @@ def load_data(df_stocks_selected, engine, batch_size=1000):
 
                 conn.execute(upsert_statement)
 
-            print("✅ Bulk upsert completed successfully.")
+            print("Bulk upsert completed successfully.")
         except exc.SQLAlchemyError as e:
             print(f" Error during upsert: {e}")
 
 # --------------------
-# Main Execution Block
+#  Execution Block
 # --------------------
 if __name__ == "__main__":
-    # Create Engine
+    # Creating Engine
     engine = get_engine()
 
-    # Create Table if not exists
+    # Creating Table if not exists
     create_table(engine)
 
-    # Extract Data
+    # Extracting Data
     df = extract_stock_data(api_key)
 
-    # Transform Data (Now ensures time zone is UTC)
+    # Transforming Data 
     df_stocks_selected = transform_data(df)
 
-    # Load Data into the Database
+    # Loading Data into the Database
     load_data(df_stocks_selected, engine)
