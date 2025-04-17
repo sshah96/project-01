@@ -1,0 +1,26 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.9
+    commands:
+      - echo "Installing dbt and dependencies..."
+      - pip install --upgrade pip
+      - pip install dbt-snowflake  # change if using Redshift, BigQuery, etc.
+  pre_build:
+    commands:
+      - echo "Fetching dbt profiles.yml from S3"
+      - aws s3 cp s3://my-dbt-config-bucket/profiles.yml ~/.dbt/profiles.yml
+      - echo "Installing dbt packages..."
+      - dbt deps
+  build:
+    commands:
+      - echo "Running dbt run..."
+      - dbt run --profiles-dir ~/.dbt
+      - echo "Running dbt test..."
+      - dbt test --profiles-dir ~/.dbt
+artifacts:
+  files:
+    - "logs/**/*"
+    - "target/**/*"

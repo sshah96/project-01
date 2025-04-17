@@ -1,0 +1,11 @@
+
+    
+    
+    
+    create table "dbt_deployment"."public"."customer_customer_demo" ("customer_id" integer,"customer_type_id" integer)
+  ;
+    -- dbt seed --
+    
+
+;
+  

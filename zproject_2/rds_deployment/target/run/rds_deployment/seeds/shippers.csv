@@ -1,0 +1,14 @@
+
+    
+    
+    
+    create table "dbt_deployment"."public"."shippers" ("shipper_id" integer,"company_name" text,"phone" text)
+  ;
+    -- dbt seed --
+    
+          insert into "dbt_deployment"."public"."shippers" ("shipper_id", "company_name", "phone") values
+          (%s,%s,%s),(%s,%s,%s),(%s,%s,%s),(%s,%s,%s),(%s,%s,%s),(%s,%s,%s)
+      
+
+;
+  

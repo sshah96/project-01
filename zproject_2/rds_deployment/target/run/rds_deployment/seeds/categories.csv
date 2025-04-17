@@ -1,0 +1,14 @@
+
+    
+    
+    
+    create table "dbt_deployment"."public"."categories" ("category_id" integer,"category_name" text,"description" text,"picture" text)
+  ;
+    -- dbt seed --
+    
+          insert into "dbt_deployment"."public"."categories" ("category_id", "category_name", "description", "picture") values
+          (%s,%s,%s,%s),(%s,%s,%s,%s),(%s,%s,%s,%s),(%s,%s,%s,%s),(%s,%s,%s,%s),(%s,%s,%s,%s),(%s,%s,%s,%s),(%s,%s,%s,%s)
+      
+
+;
+  

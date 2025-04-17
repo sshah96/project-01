@@ -1,0 +1,10 @@
+name: 'rds_deployment'
+version: '1.0'
+config-version: 2
+
+profile: 'rds_deployment'
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+target-path: "target"
+clean-targets: ["target", "dbt_modules"]

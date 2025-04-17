@@ -1,0 +1,62 @@
+version: 2
+
+models:
+  - name: dim_customers
+    description: "Customer dimension table"
+    columns:
+      - name: customer_id
+        description: "Primary key of the customer"
+        tests:
+          - unique
+          - not_null
+
+  - name: dim_products
+    description: "Product dimension table enriched with supplier and category info"
+    columns:
+      - name: product_id
+        description: "Primary key of the product"
+        tests:
+          - unique
+          - not_null
+
+  - name: dim_employees
+    description: "Slowly changing dimension of employees"
+    columns:
+      - name: employee_key
+        description: "Surrogate key for employee SCD2"
+        tests:
+          - unique
+          - not_null
+
+  - name: fact_order_details
+    description: "Fact table aggregating order line details by product and customer"
+    columns:
+      - name: order_id
+        description: "Order identifier"
+        tests:
+          - not_null
+      - name: product_id
+        description: "Product identifier"
+        tests:
+          - not_null
+      - name: customer_id
+        description: "Customer identifier"
+        tests:
+          - not_null
+
+  - name: obt_orders
+    description: "One Big Table (OBT) for analytics and BI consumption"
+    columns:
+      - name: order_id
+        tests: [not_null]
+      - name: product_id
+        tests: [not_null]
+      - name: customer_id
+        tests: [not_null]
+      - name: order_date
+        tests: [not_null]
+
+snapshots:
+  - name: employees_snapshot
+    description: "Snapshot for tracking changes in employee data using check strategy"
+
